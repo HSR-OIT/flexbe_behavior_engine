@@ -106,10 +106,10 @@ class BehaviorLauncher(Node):
 
     def _status_callback(self, msg):
         if msg.code in [BEStatus.READY, BEStatus.FINISHED, BEStatus.FAILED, BEStatus.ERROR, BEStatus.RUNNING, BEStatus.STARTED]:
-            self.get_logger().info(f"BE status code={msg.code} received - READY for new behavior!")
+            self.get_logger().debug(f"BE status code={msg.code} received - READY for new behavior!")
             self._ready_event.set()
         else:
-            self.get_logger().info(f"BE status code={msg.code} received ")
+            self.get_logger().debug(f"BE status code={msg.code} received ")
 
     def _request_callback(self, msg):
         self.get_logger().info(f"Got message from request behavior for {msg.behavior_name}")

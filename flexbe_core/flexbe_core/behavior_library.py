@@ -61,14 +61,75 @@ class BehaviorLibrary:
         """Parse all ROS2 packages to update the internal behavior library."""
         self._behavior_lib = {}
         for pkg_name, pkg_path in get_packages_with_prefixes().items():
-            pkg = parse_package(os.path.join(pkg_path, 'share', pkg_name))
+            pkg_root = self._get_source_package_path(pkg_name, pkg_path) or os.path.join(pkg_path, 'share', pkg_name)
+            pkg = parse_package(pkg_root)
             for export in pkg.exports:
                 if export.tagname == "flexbe_behaviors":
                     try:
-                        self._add_behavior_manifests(os.path.join(pkg_path, 'lib', pkg_name, 'manifest'), pkg_name)
+                        manifest_path = os.path.join(pkg_root, 'manifest')
+                        if not os.path.isdir(manifest_path):
+                            manifest_path = os.path.join(pkg_path, 'lib', pkg_name, 'manifest')
+                        self._add_behavior_manifests(manifest_path, pkg_name)
                     except KeyError as exc:
                         print(f"Error : duplicate behavior name found in {pkg_name} \n  {exc}", flush=True)
                         raise exc
+
+    def _get_source_package_path(self, pkg_name, pkg_path):
+        """同じワークスペース内のソースパッケージパスを返す。"""
+        if '/install/' not in pkg_path:
+            return None
+
+        src_root = os.path.join(pkg_path.split('/install/')[0], 'src')
+        if not os.path.isdir(src_root):
+            return None
+
+        for root, dirs, files in os.walk(src_root):
+            if 'package.xml' not in files:
+                continue
+            try:
+                pkg = parse_package(root)
+            except Exception:  # pylint: disable=broad-except
+                continue
+            if pkg.name == pkg_name:
+                return root
+            if 'build' in dirs:
+                dirs.remove('build')
+            if 'install' in dirs:
+                dirs.remove('install')
+            if 'log' in dirs:
+                dirs.remove('log')
+
+        return None
+
+    def _get_source_module_path(self, pkg_name, module_path):
+        """同じワークスペース内のソースPythonモジュールパスを返す。"""
+        if '/install/' not in module_path:
+            return None
+
+        src_root = os.path.join(module_path.split('/install/')[0], 'src')
+        if not os.path.isdir(src_root):
+            return None
+
+        for root, dirs, files in os.walk(src_root):
+            if 'package.xml' not in files:
+                continue
+            try:
+                pkg = parse_package(root)
+            except Exception:  # pylint: disable=broad-except
+                continue
+            if pkg.name == pkg_name:
+                for candidate in (os.path.join(root, pkg_name), os.path.join(root, 'src', pkg_name)):
+                    if os.path.isdir(candidate) and os.path.exists(os.path.join(candidate, '__init__.py')):
+                        return candidate
+                return None
+            if 'build' in dirs:
+                dirs.remove('build')
+            if 'install' in dirs:
+                dirs.remove('install')
+            if 'log' in dirs:
+                dirs.remove('log')
+
+        return None
 
     def _add_behavior_manifests(self, path, pkg=None):
         """
@@ -197,6 +258,7 @@ class BehaviorLibrary:
 
         try:
             module_path = __import__(be_entry["package"]).__path__[-1]
+            module_path = self._get_source_module_path(be_entry["package"], module_path) or module_path
         except ImportError:
             try:
                 # Attempt to replace prior use of ROS 1 package finder
